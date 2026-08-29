@@ -364,7 +364,12 @@ const JOBS = {
   persona: { label:'Persona Gurus', tagClass:'job-persona', assignees:['Me','Video Editor','Graphic Designer','Content Creator'] }
 };
 
-function isoDate(d){ return d.toISOString().slice(0,10); }
+function isoDate(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
 function currentWorkWeek(){
   // Returns the currently-relevant Sun-Wed block: if today is Thu/Fri/Sat, show the upcoming week; otherwise the current one.
   const today = new Date(); today.setHours(0,0,0,0);

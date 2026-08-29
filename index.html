@@ -88,7 +88,9 @@
   .tag.job-dod{ background:var(--dod-bg); color:var(--dod); }
   .tag.job-persona{ background:var(--persona-bg); color:var(--persona); }
   .tag.client, .tag.assignee{ background:#EFEFED; color:var(--ink-soft); }
-  .tag.day{ background:#FFF4E5; color:#92400E; font-weight:700; }
+  .tag.date{ background:#F0EFED; color:var(--ink-soft); font-weight:700; }
+  .tag.date.today{ background:#FFF4E5; color:#92400E; }
+  .tag.date.overdue{ background:#FBE7E7; color:var(--danger); }
   .del{ border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:16px; padding:4px 6px; flex-shrink:0; }
   .del:hover{ color:var(--danger); }
   .empty{ font-size:13px; color:var(--ink-soft); padding:6px 4px; font-style:italic; }
@@ -136,7 +138,9 @@
   /* Planner */
   .planner-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
   .planner-day{ background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; min-height:120px; }
-  .planner-day h3{ font-size:12px; margin:0 0 8px 0; font-family:var(--mono); text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); display:flex; justify-content:space-between; }
+  .planner-day h3{ font-size:12px; margin:0 0 2px 0; font-family:var(--mono); text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); display:flex; justify-content:space-between; }
+  .planner-day .pdate{ font-size:11px; color:var(--ink-soft); margin-bottom:8px; font-family:var(--mono); }
+  .planner-day.is-today{ border-color:var(--ink); border-width:2px; }
   .planner-day h3 .count{ background:#F0EFED; border-radius:10px; padding:1px 7px; font-size:10px; }
   .planner-task{ font-size:12.5px; padding:7px 6px; border-bottom:1px solid var(--line); }
   .planner-task:last-child{ border-bottom:none; }
@@ -189,13 +193,7 @@
       </select>
       <select id="captureClient"><option value="">No client</option></select>
       <select id="captureAssignee"><option value="Me">Me</option></select>
-      <select id="captureDay">
-        <option value="">No day</option>
-        <option value="sun">Sun</option>
-        <option value="mon">Mon</option>
-        <option value="tue">Tue</option>
-        <option value="wed">Wed</option>
-      </select>
+      <input type="date" id="captureDate" placeholder="Due date">
       <button id="captureAdd">Add</button>
     </div>
   </div>
@@ -225,8 +223,8 @@
       </div>
       <div class="planner-grid" id="plannerGrid"></div>
       <div class="card" style="margin-top:12px;">
-        <h2>No day set</h2>
-        <div class="sub">Open tasks without a day assigned yet.</div>
+        <h2>Not in this week</h2>
+        <div class="sub">Open tasks with no date, or a date outside this Sun–Wed block.</div>
         <div id="plannerUnassigned"></div>
       </div>
     </div>
@@ -352,7 +350,33 @@ const JOBS = {
   dod:     { label:'DOD',           tagClass:'job-dod',     assignees:['Me'] },
   persona: { label:'Persona Gurus', tagClass:'job-persona', assignees:['Me','Video Editor','Graphic Designer','Content Creator'] }
 };
-const DAYS = [ ['sun','Sunday'], ['mon','Monday'], ['tue','Tuesday'], ['wed','Wednesday'] ];
+
+function isoDate(d){ return d.toISOString().slice(0,10); }
+function currentWorkWeek(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dow = today.getDay();
+  const offsetToSunday = dow===0?0 : dow===1?-1 : dow===2?-2 : dow===3?-3 : dow===4?3 : dow===5?2 : 1;
+  const sunday = new Date(today); sunday.setDate(today.getDate()+offsetToSunday);
+  const names = ['Sunday','Monday','Tuesday','Wednesday'];
+  return names.map((name,i)=>{
+    const d = new Date(sunday); d.setDate(sunday.getDate()+i);
+    return { name, iso: isoDate(d), label: d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) };
+  });
+}
+function dateBadge(dateStr, status){
+  if(!dateStr) return null;
+  const d = new Date(dateStr+'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diffDays = Math.round((d-today)/86400000);
+  let label;
+  if(diffDays===0) label='Today';
+  else if(diffDays===1) label='Tomorrow';
+  else if(diffDays===-1) label='Yesterday';
+  else label = d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  const overdue = diffDays<0 && status!=='done';
+  const isToday = diffDays===0;
+  return { label, overdue, isToday };
+}
 const DEFAULT_ACCOUNTS = {
   vira: ['Welcare Hospital','Katameya Hospital','Noor Scan','Emily Scan','Hala Scan','Dr Mohamed Hagag','Dr Mahmoud El-Badawi'],
   dod: ['Blue Badr','Lora','Dr Sherif','Lifestyle','Crown','Dr Amr Mohamed'],
@@ -438,9 +462,10 @@ function addTaskFromCapture(){
   const job = document.getElementById('captureJob').value;
   const client = document.getElementById('captureClient').value;
   const assignee = document.getElementById('captureAssignee').value;
-  const day = document.getElementById('captureDay').value;
-  state.tasks.unshift({ id: uid(), text, job, client, assignee, day, status:'open', createdAt: Date.now() });
+  const date = document.getElementById('captureDate').value;
+  state.tasks.unshift({ id: uid(), text, job, client, assignee, date, status:'open', createdAt: Date.now() });
   textEl.value = '';
+  document.getElementById('captureDate').value = '';
   save(); renderAll();
 }
 
@@ -454,6 +479,12 @@ document.querySelectorAll('nav button').forEach(btn=>{
   });
 });
 
+function byDateThenRecency(a,b){
+  if(a.date && b.date) return a.date.localeCompare(b.date) || (b.createdAt-a.createdAt);
+  if(a.date && !b.date) return -1;
+  if(!a.date && b.date) return 1;
+  return b.createdAt - a.createdAt;
+}
 function nextStatus(s){ return s==='open' ? 'waiting' : s==='waiting' ? 'done' : 'open'; }
 function statusLabel(s){ return s==='open' ? 'Open' : s==='waiting' ? 'Waiting' : 'Done'; }
 
@@ -461,7 +492,8 @@ function taskRow(t){
   const job = JOBS[t.job];
   const div = document.createElement('div');
   div.className = 'task-row';
-  const dayLbl = t.day ? DAYS.find(d=>d[0]===t.day)[1].slice(0,3) : '';
+  const badge = dateBadge(t.date, t.status);
+  const dateTagClass = badge ? ('tag date' + (badge.overdue?' overdue':'') + (badge.isToday?' today':'')) : '';
   div.innerHTML = `
     <button class="status-pill ${t.status}">${statusLabel(t.status)}</button>
     <div class="task-main">
@@ -470,7 +502,7 @@ function taskRow(t){
         <span class="tag ${job.tagClass}">${job.label}</span>
         ${t.client?`<span class="tag client">${escapeHtml(t.client)}</span>`:''}
         ${t.assignee?`<span class="tag assignee">${escapeHtml(t.assignee)}</span>`:''}
-        ${dayLbl?`<span class="tag day">${dayLbl}</span>`:''}
+        ${badge?`<span class="${dateTagClass}">${badge.overdue?'⚠ ':''}${badge.label}</span>`:''}
       </div>
     </div>
     <button class="del">✕</button>
@@ -496,7 +528,7 @@ function renderAll(){
   document.getElementById('datestamp').textContent = new Date().toLocaleString(undefined,{weekday:'long', year:'numeric', month:'long', day:'numeric'});
   const open = t => t.status !== 'done';
   const byRecency = (a,b)=> b.createdAt - a.createdAt;
-  renderList(document.getElementById('todayList'), state.tasks.filter(open).sort(byRecency));
+  renderList(document.getElementById('todayList'), state.tasks.filter(open).sort(byDateThenRecency));
   populateClientFilter('vira','viraFilter');
   populateClientFilter('dod','dodFilter');
   populateClientFilter('persona','personaFilter');
@@ -513,11 +545,13 @@ function renderPlanner(){
   const grid = document.getElementById('plannerGrid');
   grid.innerHTML = '';
   const byRecency = (a,b)=> b.createdAt - a.createdAt;
-  DAYS.forEach(([key,label])=>{
-    const tasks = state.tasks.filter(t=>t.day===key && t.status!=='done').sort(byRecency);
+  const week = currentWorkWeek();
+  const todayIso = isoDate(new Date());
+  week.forEach(day=>{
+    const tasks = state.tasks.filter(t=>t.date===day.iso && t.status!=='done').sort(byRecency);
     const col = document.createElement('div');
-    col.className = 'planner-day';
-    col.innerHTML = `<h3>${label}<span class="count">${tasks.length}</span></h3>`;
+    col.className = 'planner-day' + (day.iso===todayIso ? ' is-today' : '');
+    col.innerHTML = `<h3>${day.name}<span class="count">${tasks.length}</span></h3><div class="pdate">${day.label}${day.iso===todayIso?' · today':''}</div>`;
     if(tasks.length===0){
       col.innerHTML += '<div class="empty">Nothing planned.</div>';
     } else {
@@ -531,7 +565,8 @@ function renderPlanner(){
     }
     grid.appendChild(col);
   });
-  const unassigned = state.tasks.filter(t=>!t.day && t.status!=='done').sort(byRecency);
+  const weekIsos = week.map(d=>d.iso);
+  const unassigned = state.tasks.filter(t=>!weekIsos.includes(t.date) && t.status!=='done').sort(byRecency);
   renderList(document.getElementById('plannerUnassigned'), unassigned);
 }
 
@@ -544,11 +579,10 @@ function populateClientFilter(job, selectId){
   if(!sel.dataset.wired){ sel.addEventListener('change', renderAll); sel.dataset.wired = '1'; }
 }
 function renderJobList(job, listId, filterId){
-  const byRecency = (a,b)=> b.createdAt - a.createdAt;
   const filterVal = document.getElementById(filterId).value;
   let tasks = state.tasks.filter(t=>t.job===job);
   if(filterVal) tasks = tasks.filter(t=>t.client===filterVal);
-  renderList(document.getElementById(listId), tasks.sort(byRecency));
+  renderList(document.getElementById(listId), tasks.sort(byDateThenRecency));
 }
 function renderAccountsPanel(job, containerId){
   const wrap = document.getElementById(containerId);

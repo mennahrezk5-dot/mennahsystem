@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Center</title>
+<style>
+  :root{
+    --bg:#F7F6F3; --ink:#1F2421; --ink-soft:#5A5F5A; --line:#E4E1DA; --surface:#FFFFFF;
+    --vira:#146356; --vira-bg:#EAF3F1; --dod:#A6541C; --dod-bg:#F7EEE5;
+    --persona:#5B3A9E; --persona-bg:#F0EBFA; --today:#1F2421; --danger:#B3261E;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); }
+
+  /* ---- Login screen ---- */
+  #loginScreen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .login-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:32px;
+    max-width:360px; width:100%; box-shadow:0 8px 30px rgba(31,36,33,0.08);
+  }
+  .login-card h1{ font-size:20px; margin:0 0 4px 0; }
+  .login-card .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); }
+  .login-card input{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:7px; font-size:14px;
+    margin-top:14px; font-family:var(--sans);
+  }
+  .login-card button{
+    width:100%; margin-top:16px; padding:11px; border:none; border-radius:7px; background:var(--ink);
+    color:#fff; font-weight:600; font-size:14px; cursor:pointer;
+  }
+  .login-card button:hover{ opacity:.9; }
+  #loginError{ color:var(--danger); font-size:13px; margin-top:10px; min-height:16px; }
+
+  /* ---- App (reused from Command Center) ---- */
+  #app{ display:none; }
+  header{ padding:20px 16px 0 16px; max-width:980px; margin:0 auto; display:flex; justify-content:space-between; align-items:flex-start; }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); }
+  h1{ font-size:24px; margin:4px 0 2px 0; font-weight:700; letter-spacing:-0.01em; }
+  .datestamp{ font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-bottom:14px; }
+  #signOutBtn{ background:none; border:1px solid var(--line); border-radius:20px; padding:7px 12px; font-size:12px; color:var(--ink-soft); cursor:pointer; font-family:var(--mono); }
+
+  .capture{
+    max-width:980px; margin:0 auto 16px auto; padding:12px; background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    position:sticky; top:8px; z-index:20; box-shadow:0 4px 14px rgba(31,36,33,0.06);
+    margin-left:16px; margin-right:16px;
+  }
+  .capture input[type=text]{ flex:1 1 220px; min-width:150px; padding:10px 12px; border:1px solid var(--line); border-radius:7px; font-size:14px; background:#FCFCFB; }
+  .capture select{ padding:10px 8px; border:1px solid var(--line); border-radius:7px; font-size:13px; background:#FCFCFB; color:var(--ink); max-width:150px; }
+  .capture button{ padding:10px 16px; border:none; border-radius:7px; background:var(--ink); color:#fff; font-weight:600; font-size:13px; cursor:pointer; }
+
+  nav{ max-width:980px; margin:0 auto 16px auto; padding:0 16px; display:flex; gap:6px; flex-wrap:wrap; }
+  nav button{ font-family:var(--mono); font-size:12px; letter-spacing:.03em; padding:9px 14px; border-radius:20px; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); cursor:pointer; font-weight:600; }
+  nav button.active{ color:#fff; border-color:transparent; }
+  nav button[data-tab=today].active{ background:var(--today); }
+  nav button[data-tab=vira].active{ background:var(--vira); }
+  nav button[data-tab=dod].active{ background:var(--dod); }
+  nav button[data-tab=persona].active{ background:var(--persona); }
+  nav button[data-tab=team].active{ background:#333; }
+
+  main{ max-width:980px; margin:0 auto; padding:0 16px 60px 16px; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .card h2{ font-size:14px; margin:0 0 10px 0; }
+  .card .sub{ font-size:12px; color:var(--ink-soft); margin:-6px 0 12px 0; }
+
+  .task-row{ display:flex; align-items:flex-start; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line); }
+  .task-row:last-child{ border-bottom:none; }
+  .task-row input[type=checkbox]{ margin-top:3px; width:16px; height:16px; flex-shrink:0; cursor:pointer;}
+  .task-text{ flex:1; font-size:14px; line-height:1.4; }
+  .task-text.done{ text-decoration:line-through; color:var(--ink-soft); }
+  .tags{ display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; }
+  .tag{ font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; }
+  .tag.job-vira{ background:var(--vira-bg); color:var(--vira); }
+  .tag.job-dod{ background:var(--dod-bg); color:var(--dod); }
+  .tag.job-persona{ background:var(--persona-bg); color:var(--persona); }
+  .tag.client, .tag.assignee{ background:#EFEFED; color:var(--ink-soft); }
+  .del{ border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:15px; padding:2px 6px; }
+  .del:hover{ color:var(--danger); }
+  .empty{ font-size:13px; color:var(--ink-soft); padding:6px 4px; font-style:italic; }
+
+  .accounts-wrap{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+  .account-chip{ display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:20px; border:1px solid var(--line); font-size:12px; background:#FCFCFB; }
+  .account-chip.hv{ border-color:var(--vira); background:var(--vira-bg); color:var(--vira); font-weight:600; }
+  .account-chip .x{ cursor:pointer; color:var(--ink-soft); }
+  .add-account{ display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .add-account input{ flex:1; min-width:140px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-size:12px; }
+  .add-account label{ font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; }
+  .add-account button{ padding:7px 12px; border:none; border-radius:6px; background:var(--ink); color:#fff; font-size:12px; cursor:pointer; }
+
+  .flow{ display:flex; flex-wrap:wrap; align-items:center; font-size:12px; }
+  .flow .step{ background:var(--vira-bg); color:var(--vira); padding:7px 10px; border-radius:6px; font-weight:600; display:flex; gap:6px; align-items:center; }
+  .flow .n{ font-family:var(--mono); font-size:10px; opacity:.7; }
+  .flow .arrow{ margin:0 6px; color:var(--ink-soft); }
+
+  .check-row{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line); }
+  .check-row:last-child{ border-bottom:none; }
+  .check-row input{ width:16px; height:16px; cursor:pointer; }
+  .check-row span.done{ text-decoration:line-through; color:var(--ink-soft); }
+  .reset-btn{ margin-top:10px; font-size:11px; font-family:var(--mono); background:none; border:1px solid var(--line); padding:6px 10px; border-radius:6px; cursor:pointer; color:var(--ink-soft); }
+
+  .countdown-grid{ display:flex; gap:12px; flex-wrap:wrap; }
+  .countdown-box{ flex:1; min-width:160px; padding:14px; border-radius:8px; background:var(--persona-bg); text-align:center; }
+  .countdown-box .num{ font-size:32px; font-weight:700; color:var(--persona); font-family:var(--mono); }
+  .countdown-box .lbl{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+  select.team-select{ padding:8px 10px; border-radius:6px; border:1px solid var(--line); font-size:13px; margin-bottom:12px; width:100%; }
+  .roster{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .roster .role{ font-family:var(--mono); font-size:11px; background:#F1F0EC; color:var(--ink-soft); padding:5px 9px; border-radius:5px; }
+
+  #view-vira .card{ border-left:4px solid var(--vira); }
+  #view-dod .card{ border-left:4px solid var(--dod); }
+  #view-persona .card{ border-left:4px solid var(--persona); }
+  details.collapse{ margin-top:2px; }
+  details.collapse > summary{
+    cursor:pointer; font-size:12px; font-family:var(--mono); color:var(--ink-soft);
+    list-style:none; display:flex; align-items:center; gap:6px; padding:4px 0;
+  }
+  details.collapse > summary::-webkit-details-marker{ display:none; }
+  details.collapse > summary::before{ content:"▸"; font-size:10px; }
+  details.collapse[open] > summary::before{ content:"▾"; }
+  details.collapse .inner{ margin-top:10px; }
+  .filter-row{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .filter-row label{ font-size:12px; color:var(--ink-soft); font-family:var(--mono); }
+  .filter-row select{ padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-size:13px; background:#FCFCFB; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="eyebrow">Operations Log</div>
+    <h1>Command Center</h1>
+    <input type="email" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button id="loginBtn">Log In</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div>
+      <div class="eyebrow">Operations Log</div>
+      <h1>Command Center</h1>
+      <div class="datestamp" id="datestamp"></div>
+    </div>
+    <button id="signOutBtn">Sign out</button>
+  </header>
+
+  <div class="capture">
+    <input type="text" id="captureText" placeholder="What just came in?">
+    <select id="captureJob">
+      <option value="vira">Vira</option>
+      <option value="dod">DOD</option>
+      <option value="persona">Persona Gurus</option>
+    </select>
+    <select id="captureClient"><option value="">No client/account</option></select>
+    <select id="captureAssignee"><option value="Me">Me</option></select>
+    <button id="captureAdd">Add</button>
+  </div>
+
+  <nav>
+    <button class="active" data-tab="today">Today · Inbox</button>
+    <button data-tab="vira">Vira</button>
+    <button data-tab="dod">DOD</button>
+    <button data-tab="persona">Persona Gurus</button>
+    <button data-tab="team">By Team Member</button>
+  </nav>
+
+  <main>
+    <div class="view active" id="view-today">
+      <div class="card">
+        <h2>Everything open, across all jobs</h2>
+        <div class="sub">Sorted newest first.</div>
+        <div id="todayList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-vira">
+      <div class="card">
+        <h2 style="color:var(--vira)">Accounts (7)</h2>
+        <div class="sub">Flagged ⚡ = high-volume WhatsApp clients.</div>
+        <div class="accounts-wrap" id="viraAccounts"></div>
+        <details class="collapse"><summary>Manage accounts</summary>
+          <div class="inner add-account">
+            <input type="text" id="viraAccountInput" placeholder="Add account name...">
+            <label><input type="checkbox" id="viraAccountHV"> High-volume / WhatsApp</label>
+            <button id="viraAccountAdd">Add</button>
+          </div>
+        </details>
+      </div>
+      <details class="collapse card"><summary>Standard content workflow</summary>
+        <div class="inner">
+          <div class="flow">
+            <div class="step"><span class="n">1</span>Write script</div><div class="arrow">→</div>
+            <div class="step"><span class="n">2</span>Shoot</div><div class="arrow">→</div>
+            <div class="step"><span class="n">3</span>Editor delivers link</div><div class="arrow">→</div>
+            <div class="step"><span class="n">4</span>Add to client sheet</div><div class="arrow">→</div>
+            <div class="step"><span class="n">5</span>Client approval</div><div class="arrow">→</div>
+            <div class="step"><span class="n">6</span>Social specialist posts</div>
+          </div>
+          <div class="roster">
+            <span class="role">Video Editor</span><span class="role">Social Media Specialist</span>
+            <span class="role">Graphic Designer</span><span class="role">Content Creator</span><span class="role">Media Buyer</span>
+          </div>
+        </div>
+      </details>
+      <div class="card">
+        <h2 style="color:var(--vira)">Vira tasks</h2>
+        <div class="filter-row"><label>Client:</label><select id="viraFilter"><option value="">All clients</option></select></div>
+        <div id="viraList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-dod">
+      <div class="card">
+        <h2 style="color:var(--dod)">Accounts</h2>
+        <div class="accounts-wrap" id="dodAccounts"></div>
+        <details class="collapse"><summary>Manage accounts</summary>
+          <div class="inner add-account">
+            <input type="text" id="dodAccountInput" placeholder="Add account name...">
+            <button id="dodAccountAdd">Add</button>
+          </div>
+        </details>
+      </div>
+      <div class="card">
+        <h2 style="color:var(--dod)">Daily checklist</h2>
+        <div id="dodChecklist"></div>
+        <button class="reset-btn" id="dodReset">↻ Reset checklist for today</button>
+      </div>
+      <div class="card">
+        <h2 style="color:var(--dod)">Ad-hoc tasks</h2>
+        <div class="filter-row"><label>Client:</label><select id="dodFilter"><option value="">All clients</option></select></div>
+        <div id="dodList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-persona">
+      <div class="card">
+        <h2 style="color:var(--persona)">Decision clock</h2>
+        <div class="countdown-grid">
+          <div class="countdown-box"><div class="num" id="cdDecision">--</div><div class="lbl">days until Sep 20</div></div>
+          <div class="countdown-box"><div class="num" id="cdEnd">--</div><div class="lbl">days until Oct 1</div></div>
+        </div>
+        <div class="roster" style="margin-top:12px;">
+          <span class="role">Video Editor</span><span class="role">Graphic Designer</span><span class="role">Content Creator</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2 style="color:var(--persona)">Accounts</h2>
+        <div class="accounts-wrap" id="personaAccounts"></div>
+        <details class="collapse"><summary>Manage accounts</summary>
+          <div class="inner add-account">
+            <input type="text" id="personaAccountInput" placeholder="Add account name...">
+            <button id="personaAccountAdd">Add</button>
+          </div>
+        </details>
+      </div>
+      <div class="card">
+        <h2 style="color:var(--persona)">Persona Gurus tasks</h2>
+        <div class="filter-row"><label>Client:</label><select id="personaFilter"><option value="">All clients</option></select></div>
+        <div id="personaList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-team">
+      <div class="card">
+        <h2>Check what someone owes you</h2>
+        <select class="team-select" id="teamSelect"></select>
+        <div id="teamList"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+// ====== PASTE YOUR FIREBASE CONFIG HERE (from Firebase console > Project settings) ======
+const firebaseConfig = {
+  apiKey: "AIzaSyDowQ9sBBYgrCQNCBYhsfKrFhAQ9nyfXuk",
+  authDomain: "command-center-2ee9e.firebaseapp.com",
+  projectId: "command-center-2ee9e",
+  storageBucket: "command-center-2ee9e.firebasestorage.app",
+  messagingSenderId: "484869905461",
+  appId: "1:484869905461:web:24de8bfdb2feb4320b657c"
+};
+// ==========================================================================================
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const JOBS = {
+  vira:    { label:'Vira',          tagClass:'job-vira',    assignees:['Me','Video Editor','Social Media Specialist','Graphic Designer','Content Creator','Media Buyer'] },
+  dod:     { label:'DOD',           tagClass:'job-dod',     assignees:['Me'] },
+  persona: { label:'Persona Gurus', tagClass:'job-persona', assignees:['Me','Video Editor','Graphic Designer','Content Creator'] }
+};
+const DEFAULT_ACCOUNTS = {
+  vira: ['Welcare Hospital','Katameya Hospital','Noor Scan','Emily Scan','Hala Scan','Dr Mohamed Hagag','Dr Mahmoud El-Badawi'],
+  dod: ['Blue Badr','Lora','Dr Sherif','Lifestyle','Crown','Dr Amr Mohamed'],
+  persona: ['Haitham Mansour','Thoht','Adel Kenj','Zada','Walemet Samak']
+};
+
+let state = { tasks: [], accounts: [], checklists: [] };
+let currentUid = null;
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  try{
+    await signInWithEmailAndPassword(auth, email, pw);
+  }catch(e){
+    errEl.textContent = 'Login failed — check email and password.';
+  }
+});
+document.getElementById('signOutBtn').addEventListener('click', ()=> signOut(auth));
+
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+    currentUid = user.uid;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    await loadData();
+  } else {
+    currentUid = null;
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+async function loadData(){
+  const ref = doc(db, 'users', currentUid, 'data', 'main');
+  const snap = await getDoc(ref);
+  if(snap.exists()){
+    state = snap.data();
+    state.tasks = state.tasks || [];
+    state.accounts = state.accounts || [];
+    state.checklists = (state.checklists && state.checklists.length) ? state.checklists : defaultChecklists();
+  } else {
+    state.checklists = defaultChecklists();
+  }
+  seedAccounts();
+  await save();
+  renderAll();
+}
+
+function seedAccounts(){
+  Object.keys(DEFAULT_ACCOUNTS).forEach(job=>{
+    const has = state.accounts.some(a=>a.job===job);
+    if(!has) DEFAULT_ACCOUNTS[job].forEach(name=> state.accounts.push({ id: uid(), job, name, highVolume:false }));
+  });
+}
+function defaultChecklists(){
+  return [
+    { id: uid(), job:'dod', text:'Check account charges / spend', lastDone: null },
+    { id: uid(), job:'dod', text:'Confirm all campaigns are running', lastDone: null }
+  ];
+}
+async function save(){
+  if(!currentUid) return;
+  const ref = doc(db, 'users', currentUid, 'data', 'main');
+  await setDoc(ref, state);
+}
+
+function populateCaptureSelects(){
+  const job = document.getElementById('captureJob').value;
+  document.getElementById('captureAssignee').innerHTML = JOBS[job].assignees.map(a=>`<option value="${a}">${a}</option>`).join('');
+  const accs = state.accounts.filter(a=>a.job===job);
+  document.getElementById('captureClient').innerHTML = '<option value="">No client/account</option>' +
+    accs.map(a=>`<option value="${a.name}">${a.name}${a.highVolume?' ⚡':''}</option>`).join('');
+}
+document.getElementById('captureJob').addEventListener('change', populateCaptureSelects);
+document.getElementById('captureAdd').addEventListener('click', addTaskFromCapture);
+document.getElementById('captureText').addEventListener('keydown', e=>{ if(e.key==='Enter') addTaskFromCapture(); });
+
+function addTaskFromCapture(){
+  const textEl = document.getElementById('captureText');
+  const text = textEl.value.trim();
+  if(!text) return;
+  const job = document.getElementById('captureJob').value;
+  const client = document.getElementById('captureClient').value;
+  const assignee = document.getElementById('captureAssignee').value;
+  state.tasks.unshift({ id: uid(), text, job, client, assignee, status:'open', createdAt: Date.now() });
+  textEl.value = '';
+  save(); renderAll();
+}
+
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+function taskRow(t){
+  const job = JOBS[t.job];
+  const div = document.createElement('div');
+  div.className = 'task-row';
+  div.innerHTML = `
+    <input type="checkbox" ${t.status==='done'?'checked':''}>
+    <div style="flex:1">
+      <div class="task-text ${t.status==='done'?'done':''}">${escapeHtml(t.text)}</div>
+      <div class="tags">
+        <span class="tag ${job.tagClass}">${job.label}</span>
+        ${t.client?`<span class="tag client">${escapeHtml(t.client)}</span>`:''}
+        ${t.assignee?`<span class="tag assignee">${escapeHtml(t.assignee)}</span>`:''}
+      </div>
+    </div>
+    <button class="del">✕</button>
+  `;
+  div.querySelector('input').addEventListener('change', ()=>{
+    t.status = t.status==='done' ? 'open' : 'done';
+    save(); renderAll();
+  });
+  div.querySelector('.del').addEventListener('click', ()=>{
+    state.tasks = state.tasks.filter(x=>x.id!==t.id);
+    save(); renderAll();
+  });
+  return div;
+}
+function renderList(container, tasks){
+  container.innerHTML = '';
+  if(tasks.length===0){ container.innerHTML = '<div class="empty">Nothing here right now.</div>'; return; }
+  tasks.forEach(t=>container.appendChild(taskRow(t)));
+}
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderAll(){
+  document.getElementById('datestamp').textContent = new Date().toLocaleString(undefined,{weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const open = t => t.status !== 'done';
+  const byRecency = (a,b)=> b.createdAt - a.createdAt;
+  renderList(document.getElementById('todayList'), state.tasks.filter(open).sort(byRecency));
+  populateClientFilter('vira','viraFilter');
+  populateClientFilter('dod','dodFilter');
+  populateClientFilter('persona','personaFilter');
+  renderJobList('vira','viraList','viraFilter');
+  renderJobList('dod','dodList','dodFilter');
+  renderJobList('persona','personaList','personaFilter');
+  renderAccountsPanel('vira','viraAccounts');
+  renderAccountsPanel('dod','dodAccounts');
+  renderAccountsPanel('persona','personaAccounts');
+  renderChecklist(); renderCountdown(); renderTeam(); populateCaptureSelects();
+}
+
+function populateClientFilter(job, selectId){
+  const sel = document.getElementById(selectId);
+  const current = sel.value;
+  const accs = state.accounts.filter(a=>a.job===job);
+  sel.innerHTML = '<option value="">All clients</option>' + accs.map(a=>`<option value="${a.name}">${a.name}</option>`).join('');
+  if(current && accs.some(a=>a.name===current)) sel.value = current;
+  if(!sel.dataset.wired){
+    sel.addEventListener('change', renderAll);
+    sel.dataset.wired = '1';
+  }
+}
+
+function renderJobList(job, listId, filterId){
+  const byRecency = (a,b)=> b.createdAt - a.createdAt;
+  const filterVal = document.getElementById(filterId).value;
+  let tasks = state.tasks.filter(t=>t.job===job);
+  if(filterVal) tasks = tasks.filter(t=>t.client===filterVal);
+  renderList(document.getElementById(listId), tasks.sort(byRecency));
+}
+
+function renderAccountsPanel(job, containerId){
+  const wrap = document.getElementById(containerId);
+  const accs = state.accounts.filter(a=>a.job===job);
+  wrap.innerHTML = '';
+  if(accs.length===0){ wrap.innerHTML = '<div class="empty">No accounts yet.</div>'; return; }
+  accs.forEach(a=>{
+    const chip = document.createElement('div');
+    chip.className = 'account-chip' + (a.highVolume ? ' hv' : '');
+    chip.innerHTML = `<span>${escapeHtml(a.name)}${a.highVolume?' ⚡':''}</span><span class="x">✕</span>`;
+    chip.querySelector('.x').addEventListener('click', ()=>{
+      state.accounts = state.accounts.filter(x=>x.id!==a.id);
+      save(); renderAll();
+    });
+    wrap.appendChild(chip);
+  });
+}
+function addAccount(job, name, highVolume){
+  if(!name.trim()) return;
+  state.accounts.push({ id: uid(), job, name: name.trim(), highVolume: !!highVolume });
+  save(); renderAll();
+}
+document.getElementById('viraAccountAdd').addEventListener('click', ()=>{
+  const input = document.getElementById('viraAccountInput'); const hv = document.getElementById('viraAccountHV');
+  addAccount('vira', input.value, hv.checked); input.value=''; hv.checked=false;
+});
+document.getElementById('dodAccountAdd').addEventListener('click', ()=>{
+  const input = document.getElementById('dodAccountInput'); addAccount('dod', input.value, false); input.value='';
+});
+document.getElementById('personaAccountAdd').addEventListener('click', ()=>{
+  const input = document.getElementById('personaAccountInput'); addAccount('persona', input.value, false); input.value='';
+});
+
+function renderChecklist(){
+  const wrap = document.getElementById('dodChecklist');
+  wrap.innerHTML = '';
+  const t = todayStr();
+  state.checklists.filter(c=>c.job==='dod').forEach(c=>{
+    const done = c.lastDone === t;
+    const row = document.createElement('div');
+    row.className = 'check-row';
+    row.innerHTML = `<input type="checkbox" ${done?'checked':''}><span class="${done?'done':''}">${escapeHtml(c.text)}</span>`;
+    row.querySelector('input').addEventListener('change', ()=>{ c.lastDone = done ? null : t; save(); renderChecklist(); });
+    wrap.appendChild(row);
+  });
+}
+document.getElementById('dodReset').addEventListener('click', ()=>{
+  state.checklists.filter(c=>c.job==='dod').forEach(c=> c.lastDone = null);
+  save(); renderChecklist();
+});
+
+function renderCountdown(){
+  const decision = new Date('2026-09-20T00:00:00');
+  const end = new Date('2026-10-01T00:00:00');
+  const now = new Date();
+  const days = d => Math.ceil((d - now) / (1000*60*60*24));
+  document.getElementById('cdDecision').textContent = Math.max(days(decision),0);
+  document.getElementById('cdEnd').textContent = Math.max(days(end),0);
+}
+
+function renderTeam(){
+  const sel = document.getElementById('teamSelect');
+  const people = new Set();
+  Object.values(JOBS).forEach(j=>j.assignees.forEach(a=>{ if(a!=='Me') people.add(a); }));
+  const current = sel.value;
+  sel.innerHTML = Array.from(people).map(p=>`<option value="${p}">${p}</option>`).join('');
+  if(current && Array.from(people).includes(current)) sel.value = current;
+  showTeamTasks();
+}
+document.getElementById('teamSelect').addEventListener('change', showTeamTasks);
+function showTeamTasks(){
+  const person = document.getElementById('teamSelect').value;
+  const tasks = state.tasks.filter(t=>t.assignee===person && t.status!=='done').sort((a,b)=>b.createdAt-a.createdAt);
+  renderList(document.getElementById('teamList'), tasks);
+}
+</script>
+</body>
+</html>

@@ -205,6 +205,7 @@
         <option value="persona">Persona Gurus</option>
       </select>
       <select id="captureClient"><option value="">No client</option></select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-soft);white-space:nowrap;"><input type="checkbox" id="captureAllClients"> All clients</label>
       <select id="captureAssignee"><option value="Me">Me</option></select>
       <input type="date" id="captureDate" placeholder="Due date">
       <button id="captureAdd">Add</button>
@@ -479,14 +480,29 @@ function addTaskFromCapture(){
   const text = textEl.value.trim();
   if(!text) return;
   const job = document.getElementById('captureJob').value;
-  const client = document.getElementById('captureClient').value;
   const assignee = document.getElementById('captureAssignee').value;
   const date = document.getElementById('captureDate').value;
   const desc = document.getElementById('captureDesc').value.trim();
-  state.tasks.unshift({ id: uid(), text, desc, job, client, assignee, date, status:'open', createdAt: Date.now() });
+  const allClients = document.getElementById('captureAllClients').checked;
+
+  if(allClients){
+    const accs = state.accounts.filter(a=>a.job===job);
+    if(accs.length===0){
+      state.tasks.unshift({ id: uid(), text, desc, job, client:'', assignee, date, status:'open', createdAt: Date.now() });
+    } else {
+      accs.forEach(a=>{
+        state.tasks.unshift({ id: uid(), text, desc, job, client:a.name, assignee, date, status:'open', createdAt: Date.now() });
+      });
+    }
+  } else {
+    const client = document.getElementById('captureClient').value;
+    state.tasks.unshift({ id: uid(), text, desc, job, client, assignee, date, status:'open', createdAt: Date.now() });
+  }
+
   textEl.value = '';
   document.getElementById('captureDesc').value = '';
   document.getElementById('captureDate').value = '';
+  document.getElementById('captureAllClients').checked = false;
   save(); renderAll();
 }
 
